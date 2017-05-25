@@ -34,7 +34,17 @@ namespace Microsoft.Web.Redis
                 {
                     if (sharedConnection == null)
                     {
-                        sharedConnection = new RedisSharedConnection(configuration,() => new StackExchangeClientConnection(configuration));
+                        if (configuration.EnableSentinel)
+                        {
+                            sharedConnection = new RedisSharedConnection(configuration,
+                                () =>
+                                    new StackExchangeClientConnection(configuration,
+                                        new StackExchangeSentinelConnection(configuration.ConnectionString)));
+                        }
+                        else
+                        {
+                            sharedConnection = new RedisSharedConnection(configuration, () => new StackExchangeClientConnection(configuration));
+                        }
                         redisUtility = new RedisUtility(configuration);
                     }
                 }
