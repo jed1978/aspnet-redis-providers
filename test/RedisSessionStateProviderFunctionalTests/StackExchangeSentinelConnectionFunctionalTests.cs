@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Text;
@@ -11,20 +12,26 @@ using Xunit;
 
 namespace Microsoft.Web.Redis.FunctionalTests
 {
-    public class StackExchangeSentinelConnectionFunctionalTests
+    public class StackExchangeSentinelConnectionFunctionalTests: IDisposable
     {
+        private const string CONFIG_FILEPATH = "..\\..\\..\\..\\..\\..\\packages\\redis-64.3.0.503\\tools\\{0}.conf";
         private const string MASTER_CONFIG_FILE = "..\\..\\..\\..\\..\\..\\packages\\redis-64.3.0.503\\tools\\redis-master.windows.conf";
         private const string SLAVE_CONFIG_FILE = "..\\..\\..\\..\\..\\..\\packages\\redis-64.3.0.503\\tools\\redis-slave.windows.conf";
         private const string SENTINEL_CONFIG_FILE = "..\\..\\..\\..\\..\\..\\packages\\redis-64.3.0.503\\tools\\sentinel.windows.conf";
 
+        private string _redisMaster = "";
+        private string _redisSlave = "";
+        private string _sentinel = "";
+
         [Fact]
         public void SentinelFailover()
         {
+            InitRedisConf();
             KillRedisServers();
 
-            using (var master = new RedisServer(MASTER_CONFIG_FILE))
-            using (var slave = new RedisServer(SLAVE_CONFIG_FILE))
-            using (var sentinel = new RedisServer(SENTINEL_CONFIG_FILE, true))
+            using (var master = new RedisServer(_redisMaster))
+            using (var slave = new RedisServer(_redisSlave, 6380))
+            using (var sentinel = new RedisServer(_sentinel, 26379, true))
             {
                 ProviderConfiguration configuration = Utility.GetDefaultConfigUtility();
                 configuration.ConnectionString = "127.0.0.1:26379, ServiceName=mymaster";
@@ -35,20 +42,20 @@ namespace Microsoft.Web.Redis.FunctionalTests
 
                 Assert.Equal("127.0.0.1:6379", masterConnectionString);
 
-                //Block Redis Master 10s to trigger Sentinel failover
-                BlockRedis(6379, 10);
-                Thread.Sleep(5000); //wait for Sentinel failover 
+                //Block Redis Master 6s to force Sentinel failover
+                BlockRedis(6379, 6);
+                Thread.Sleep(5000); //wait for Sentinel failover done
 
                 masterEndPoint = connection.GetMasterAddressByName("mymaster") as IPEndPoint;
                 masterConnectionString = $"{masterEndPoint.Address}:{masterEndPoint.Port}";
 
                 Assert.Equal("127.0.0.1:6380", masterConnectionString);
 
-                Thread.Sleep(10000); //Wait 10s till the blocking be released
+                Thread.Sleep(6000); //Wait 6s till the blocking be released
 
-                //Block new Redis Master 10s to trigger Sentinel failover again
-                BlockRedis(6380, 10);
-                Thread.Sleep(5000); //wait for Sentinel failover
+                //Block new Redis Master 6s to force Sentinel failover again
+                BlockRedis(6380, 6);
+                Thread.Sleep(5000); //wait for Sentinel failover done
 
                 masterEndPoint = connection.GetMasterAddressByName("mymaster") as IPEndPoint;
                 masterConnectionString = $"{masterEndPoint.Address}:{masterEndPoint.Port}";
@@ -62,9 +69,10 @@ namespace Microsoft.Web.Redis.FunctionalTests
         [Fact]
         public void GetMasterAddressByName_Valid()
         {
+            InitRedisConf();
             KillRedisServers();
-            using (var master =new RedisServer(MASTER_CONFIG_FILE))
-            using (var sentinel =new RedisServer(SENTINEL_CONFIG_FILE,true))
+            using (var master = new RedisServer(_redisMaster))
+            using (var sentinel =new RedisServer(_sentinel, 26379, true))
             {
                 ProviderConfiguration configuration = Utility.GetDefaultConfigUtility();
                 configuration.ConnectionString = "127.0.0.1:26379, ServiceName=mymaster";
@@ -86,6 +94,18 @@ namespace Microsoft.Web.Redis.FunctionalTests
             redisCli.Start();
         }
 
+        private void InitRedisConf()
+        {
+            _redisMaster = string.Format(CONFIG_FILEPATH, "redis-master-test.windows");
+            _redisSlave = string.Format(CONFIG_FILEPATH, "redis-slave-test.windows");
+            _sentinel = string.Format(CONFIG_FILEPATH, "sentinel-test.windows");
+
+            File.Copy(MASTER_CONFIG_FILE, _redisMaster, true);
+            File.Copy(SLAVE_CONFIG_FILE, _redisSlave, true);
+            File.Copy(SENTINEL_CONFIG_FILE, _sentinel, true);
+
+        }
+
         private static void KillRedisServers()
         {
             foreach (var proc in Process.GetProcessesByName("redis-server"))
@@ -98,6 +118,13 @@ namespace Microsoft.Web.Redis.FunctionalTests
                 {
                 }
             }
+        }
+
+        public void Dispose()
+        {
+            File.Delete(_redisMaster);
+            File.Delete(_redisSlave);
+            File.Delete(_sentinel);
         }
     }
 }

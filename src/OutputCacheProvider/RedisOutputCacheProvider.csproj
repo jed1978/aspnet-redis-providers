@@ -110,6 +110,7 @@
       <DesignTime>True</DesignTime>
       <DependentUpon>RedisProviderResource.resx</DependentUpon>
     </Compile>
+    <Compile Include="StackExchangeSentinelConnection.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />

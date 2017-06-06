@@ -69,7 +69,7 @@ namespace Microsoft.Web.Redis.FunctionalTests
         public void Constructor_SetConnectionStringFromSentinel()
         {
             using (var master = new RedisServer(MASTER_CONFIG_FILE))
-            using (var sentinel = new RedisServer(SENTINEL_CONFIG_FILE, true))
+            using (var sentinel = new RedisServer(SENTINEL_CONFIG_FILE, 26379, true))
             {
                 int databaseId = 5;
                 ProviderConfiguration configuration = Utility.GetDefaultConfigUtility();

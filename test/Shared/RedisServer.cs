@@ -7,8 +7,10 @@ using StackExchange.Redis;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.Eventing.Reader;
 using System.Linq;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Text;
 using System.Threading;
 
@@ -48,15 +50,14 @@ namespace Microsoft.Web.Redis.FunctionalTests
             WaitForRedisToStart();
         }
 
-        public RedisServer(string configFile, bool sentinel = false)
+        public RedisServer(string configFile, int port = 6379, bool sentinel = false)
         {
             _server = new Process();
             _server.StartInfo.FileName = "..\\..\\..\\..\\..\\..\\packages\\redis-64.3.0.503\\tools\\redis-server.exe";
             _server.StartInfo.Arguments = !sentinel ? $" {configFile}" : $" {configFile} --sentinel";
             _server.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
             _server.Start();
-            //WaitForRedisToStart();
-
+            WaitForRedisToStart(port);
         }
 
         // Make sure that no redis-server instance is running

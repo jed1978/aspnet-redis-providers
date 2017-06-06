@@ -106,7 +106,7 @@ namespace Microsoft.Web.Redis
 
         public void Close()
         {
-            sentinelConnection.Close();
+            if (sentinelConnection != null) sentinelConnection.Close();
             redisMultiplexer.Close();
         }
 
