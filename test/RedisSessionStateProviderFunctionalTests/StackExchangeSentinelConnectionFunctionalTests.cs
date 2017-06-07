@@ -42,8 +42,8 @@ namespace Microsoft.Web.Redis.FunctionalTests
 
                 Assert.Equal("127.0.0.1:6379", masterConnectionString);
 
-                //Block Redis Master 6s to force Sentinel failover
-                BlockRedis(6379, 6);
+                //Block Redis Master 7s to force Sentinel failover
+                BlockRedis(6379, 7);
                 Thread.Sleep(5000); //wait for Sentinel failover done
 
                 masterEndPoint = connection.GetMasterAddressByName("mymaster") as IPEndPoint;
@@ -51,10 +51,10 @@ namespace Microsoft.Web.Redis.FunctionalTests
 
                 Assert.Equal("127.0.0.1:6380", masterConnectionString);
 
-                Thread.Sleep(6000); //Wait 6s till the blocking be released
+                Thread.Sleep(7000); //Wait 7s till the blocking be released
 
-                //Block new Redis Master 6s to force Sentinel failover again
-                BlockRedis(6380, 6);
+                //Block new Redis Master 7s to force Sentinel failover again
+                BlockRedis(6380, 7);
                 Thread.Sleep(5000); //wait for Sentinel failover done
 
                 masterEndPoint = connection.GetMasterAddressByName("mymaster") as IPEndPoint;

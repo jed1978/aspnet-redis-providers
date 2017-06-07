@@ -22,20 +22,26 @@ namespace Microsoft.Web.Redis.FunctionalTests
 
         protected void WaitForRedisToStart(int port = 6379)
         {
-            // if redis is not up in 2 seconds time than return failure
-            for (int i = 0; i < 200; i++)
+            if (port == 26379)
             {
-                Thread.Sleep(10);
-                try
+                Thread.Sleep(1500); //Needs to wait sentinel estaiblish connection between Master & Slave
+            }
+            else
+            {
+              // if redis is not up in 2 seconds time than return failure
+                for (int i = 0; i < 200; i++)
                 {
-                    Socket socket = new Socket(AddressFamily.InterNetwork,SocketType.Stream,ProtocolType.Tcp);
-                    socket.Connect("localhost", port);
-                    socket.Close();
-                    LogUtility.LogInfo("Successful started redis server after Time: {0} ms", (i+1) * 10);
-                    break;
+                    Thread.Sleep(10);
+                    try
+                    {
+                        Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                        socket.Connect("localhost", port);
+                        socket.Close();
+                        LogUtility.LogInfo("Successful started redis server after Time: {0} ms", (i + 1)*10);
+                        break;
+                    }
+                    catch {}
                 }
-                catch
-                {}
             }
         }
 
