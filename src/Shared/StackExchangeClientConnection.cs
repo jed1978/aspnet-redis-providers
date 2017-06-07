@@ -50,11 +50,12 @@ namespace Microsoft.Web.Redis
                 // As it doesn't make sense to allow to customer to set it to true as we don't give them access to ConnectionMultiplexer
                 // in case of failure customer can not create ConnectionMultiplexer so right choice is to automatically create it by providing AbortOnConnectFail = false
                 
-                //configOption.AbortOnConnectFail = false; // remark this because get connection from Sentinel
+                configOption.AbortOnConnectFail = false; 
 
                 
                 if (!string.IsNullOrEmpty(configOption.ServiceName) && sentinelConnection != null)
                 {
+                    configOption.AbortOnConnectFail = true; // set to true because connection is got from Sentinel
                     configOption.EndPoints.Clear();
                     configOption.EndPoints.Add(sentinelConnection.GetMasterAddressByName(configOption.ServiceName));
                 }
@@ -106,7 +107,7 @@ namespace Microsoft.Web.Redis
 
         public void Close()
         {
-            if (sentinelConnection != null) sentinelConnection.Close();
+            sentinelConnection?.Close();
             redisMultiplexer.Close();
         }
 
@@ -220,10 +221,13 @@ namespace Microsoft.Web.Redis
             {
                 lock (lockObject)
                 {
-                    reconnecting = true;
-                    redisMultiplexer.Close();
-                    ConnectToRedis(configuration);
-                    reconnecting = false;
+                    if (!reconnecting)
+                    {
+                        reconnecting = true;
+                        redisMultiplexer.Close();
+                        ConnectToRedis(configuration);
+                        reconnecting = false;
+                    }
                 }
             }
         }
