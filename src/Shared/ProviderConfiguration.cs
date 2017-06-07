@@ -29,6 +29,7 @@ namespace Microsoft.Web.Redis
         public int OperationTimeoutInMilliSec { get; set; }
         public string ConnectionString { get; set; }
         public string RedisSerializerType { get; set; }
+        public bool EnableSentinel { get; set; }
 
         /* Empty constructor required for testing */
         internal ProviderConfiguration()
@@ -41,7 +42,7 @@ namespace Microsoft.Web.Redis
             configuration.ThrowOnError = GetBoolSettings(config, "throwOnError", true);
             int retryTimeoutInMilliSec = GetIntSettings(config, "retryTimeoutInMilliseconds", 5000);
             configuration.RetryTimeout = new TimeSpan(0, 0, 0, 0, retryTimeoutInMilliSec);
-            
+
             // Get request timeout from config
             HttpRuntimeSection httpRuntimeSection = ConfigurationManager.GetSection("system.web/httpRuntime") as HttpRuntimeSection;
             configuration.RequestTimeout = httpRuntimeSection.ExecutionTimeout;
@@ -117,6 +118,8 @@ namespace Microsoft.Web.Redis
 
             ConnectionTimeoutInMilliSec = GetIntSettings(config, "connectionTimeoutInMilliseconds", 0);
             OperationTimeoutInMilliSec = GetIntSettings(config, "operationTimeoutInMilliseconds", 0);
+            EnableSentinel = GetBoolSettings(config, "enableSentinel", false);
+
         }
 
         // 1) Use key available inside AppSettings

@@ -5,6 +5,7 @@
 
 using System;
 using System.Diagnostics;
+using System.Net;
 using System.Web.SessionState;
 using StackExchange.Redis;
 
@@ -17,13 +18,30 @@ namespace Microsoft.Web.Redis
         IDatabase connection;
         ProviderConfiguration configuration;
         private RedisUtility redisUtility;
+        ConfigurationOptions configOption;
+        object lockObject;
+        private bool reconnecting = false;
+        private StackExchangeSentinelConnection sentinelConnection;
 
         public StackExchangeClientConnection(ProviderConfiguration configuration)
         {
             this.configuration = configuration;
             this.redisUtility = new RedisUtility(configuration);
-            ConfigurationOptions configOption;
+            this.lockObject = new object();
+            ConnectToRedis(configuration);
+        }
 
+        public StackExchangeClientConnection(ProviderConfiguration configuration, StackExchangeSentinelConnection sentinelConnection)
+        {
+            this.configuration = configuration;
+            this.sentinelConnection = sentinelConnection;
+            this.redisUtility = new RedisUtility(configuration);
+            this.lockObject = new object();
+            ConnectToRedis(configuration);
+        }
+
+        private void ConnectToRedis(ProviderConfiguration configuration)
+        {
             // If connection string is given then use it otherwise use individual options
             if (!string.IsNullOrEmpty(configuration.ConnectionString))
             {
@@ -31,7 +49,16 @@ namespace Microsoft.Web.Redis
                 // Setting explicitly 'abortconnect' to false. It will overwrite customer provided value for 'abortconnect'
                 // As it doesn't make sense to allow to customer to set it to true as we don't give them access to ConnectionMultiplexer
                 // in case of failure customer can not create ConnectionMultiplexer so right choice is to automatically create it by providing AbortOnConnectFail = false
-                configOption.AbortOnConnectFail = false;
+                
+                configOption.AbortOnConnectFail = false; 
+
+                
+                if (!string.IsNullOrEmpty(configOption.ServiceName) && sentinelConnection != null)
+                {
+                    configOption.AbortOnConnectFail = true; // set to true because connection is got from Sentinel
+                    configOption.EndPoints.Clear();
+                    configOption.EndPoints.Add(sentinelConnection.GetMasterAddressByName(configOption.ServiceName));
+                }
             }
             else
             {
@@ -80,6 +107,7 @@ namespace Microsoft.Web.Redis
 
         public void Close()
         {
+            sentinelConnection?.Close();
             redisMultiplexer.Close();
         }
 
@@ -150,6 +178,30 @@ namespace Microsoft.Web.Redis
                 {
                     return RetryForScriptNotFound(redisOperation);
                 }
+                catch (RedisConnectionException)
+                {
+                    ReconnectToRedis();
+                }
+                catch (RedisServerException ex)
+                {
+                    // if slaves are READONLY and master crash and goes up faster than we start connection to new master
+                    // than connecton is against READONLY slave and if we try to write command fail with this exception. 
+                    // Than we need to find new master and retry command against this new master.
+                    if (ex.Message.Contains("READONLY"))
+                    {
+                        ReconnectToRedis();
+                    }
+                    else
+                    {
+                        TimeSpan passedTime = DateTime.Now - startTime;
+                        if (configuration.RetryTimeout < passedTime)
+                        {
+                            throw;
+                        }
+                        timeToSleepBeforeRetryInMiliseconds = SleepBeforeRetry(passedTime,
+                            timeToSleepBeforeRetryInMiliseconds);
+                    }
+                }
                 catch (Exception)
                 {
                     TimeSpan passedTime = DateTime.Now - startTime;
@@ -157,23 +209,43 @@ namespace Microsoft.Web.Redis
                     {
                         throw;
                     }
-                    else
-                    {
-                        int remainingTimeout = (int)(configuration.RetryTimeout.TotalMilliseconds - passedTime.TotalMilliseconds);
-                        // if remaining time is less than 1 sec than wait only for that much time and than give a last try
-                        if (remainingTimeout < timeToSleepBeforeRetryInMiliseconds)
-                        {
-                            timeToSleepBeforeRetryInMiliseconds = remainingTimeout;
-                        }
-                    }
-
-                    // First time try after 20 msec after that try after 1 second
-                    System.Threading.Thread.Sleep(timeToSleepBeforeRetryInMiliseconds);
-                    timeToSleepBeforeRetryInMiliseconds = 1000;
+                    timeToSleepBeforeRetryInMiliseconds = SleepBeforeRetry(passedTime,
+                        timeToSleepBeforeRetryInMiliseconds);
                 }
             }
         }
 
+        private void ReconnectToRedis()
+        {
+            if (!reconnecting)
+            {
+                lock (lockObject)
+                {
+                    if (!reconnecting)
+                    {
+                        reconnecting = true;
+                        redisMultiplexer.Close();
+                        ConnectToRedis(configuration);
+                        reconnecting = false;
+                    }
+                }
+            }
+        }
+
+        private int SleepBeforeRetry(TimeSpan passedTime, int timeToSleepBeforeRetryInMiliseconds)
+        {
+            int remainingTimeout = (int)(configuration.RetryTimeout.TotalMilliseconds - passedTime.TotalMilliseconds);
+            // if remaining time is less than 1 sec than wait only for that much time and than give a last try
+            if (remainingTimeout < timeToSleepBeforeRetryInMiliseconds)
+            {
+                timeToSleepBeforeRetryInMiliseconds = remainingTimeout;
+            }
+            // First time try after 20 msec after that try after 1 second
+            System.Threading.Thread.Sleep(timeToSleepBeforeRetryInMiliseconds);
+            timeToSleepBeforeRetryInMiliseconds = 1000;
+            return timeToSleepBeforeRetryInMiliseconds;
+        }
+        
         public int GetSessionTimeout(object rowDataFromRedis)
         {
             RedisResult rowDataAsRedisResult = (RedisResult)rowDataFromRedis;
