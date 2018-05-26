@@ -39,7 +39,6 @@ namespace Microsoft.Web.Redis.FunctionalTests
 
         private void DisposeRedisConnectionWrapper(RedisConnectionWrapper redisConn)
         {
-            redisConn.redisConnection.Close();
             RedisConnectionWrapper.sharedConnection = null;
         }
 
@@ -771,13 +770,6 @@ namespace Microsoft.Web.Redis.FunctionalTests
                 actualConnection.KeyDelete(redisConn.Keys.DataKey); 
                 DisposeRedisConnectionWrapper(redisConn);
             }
-        }
-
-        private StackExchangeClientConnection GetRedisConnection()
-        {
-            StackExchangeClientConnection client = new StackExchangeClientConnection(Utility.GetDefaultConfigUtility());
-            client.Open();
-            return client;
         }
 
         private IDatabase GetRealRedisConnection(RedisConnectionWrapper redisConn)
